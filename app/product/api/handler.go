@@ -26,6 +26,7 @@ type ProductHandler interface {
 	FindOrderConditionLogic(writer http.ResponseWriter, req *http.Request)
 	BulkUpdateOrder(writer http.ResponseWriter, req *http.Request)
 	OrderSummaryLogic(writer http.ResponseWriter, req *http.Request)
+	FindOrderHistory(writer http.ResponseWriter, req *http.Request)
 }
 
 type producthandler struct {
@@ -260,6 +261,67 @@ func (h *producthandler) FindOrderConditionLogic(writer http.ResponseWriter, req
 
 	var orders []model.Order
 	orders, err = h.ProductLogic.FindOrderConditionLogic(req.Context(), userId, jsonReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "sql: no rows in result set") {
+			respon := []httputils.StandardError{
+				{
+					Code:   "404",
+					Title:  "Not found",
+					Detail: "Product not found",
+					Object: httputils.ErrorObject{},
+				},
+			}
+			httputils.WriteErrorResponse(writer, http.StatusInternalServerError, respon)
+			return
+		}
+
+		respon := []httputils.StandardError{
+			{
+				Code:   "500",
+				Title:  "Internal server error",
+				Detail: "Terjadi kesalahan internal pada server",
+				Object: httputils.ErrorObject{},
+			},
+		}
+		httputils.WriteErrorResponse(writer, http.StatusInternalServerError, respon)
+		return
+	}
+
+	status := httputils.StandardStatus{
+		ErrorCode: 200,
+		Message:   "Order finding successfully",
+	}
+
+	envelope := httputils.StandardEnvelope{
+		Status: &status,
+		Data:   &orders,
+	}
+
+	responFix, err := json.Marshal(envelope)
+	if err != nil {
+		respon := []httputils.StandardError{
+			{
+				Code:   "500",
+				Title:  "Internal server error",
+				Detail: "Terjadi kesalahan internal pada server",
+				Object: httputils.ErrorObject{},
+			},
+		}
+		httputils.WriteErrorResponse(writer, http.StatusInternalServerError, respon)
+		return
+	}
+
+	contentType := httputils.NewContentTypeDecorator("application/json")
+	httpStatus := http.StatusOK
+
+	httputils.WriteResponse(writer, responFix, httpStatus, contentType)
+}
+
+func (h *producthandler) FindOrderHistory(writer http.ResponseWriter, req *http.Request) {
+	userId := req.Context().Value(middlewares.ContextKeyUserId).(int)
+
+	var orders []model.OrderHistory
+	orders, err := h.ProductLogic.FindOrderHistoryByIdLogic(req.Context(), userId)
 	if err != nil {
 		if strings.Contains(err.Error(), "sql: no rows in result set") {
 			respon := []httputils.StandardError{

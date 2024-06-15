@@ -34,9 +34,10 @@ func NewProductRouter(productHandler ProductHandler) *chi.Mux {
 
 	//use
 	r.With(authMiddleware).Post("/order", productHandler.OrderHandler)
-	r.With(authMiddleware).Get("/get-order", productHandler.FindOrderConditionLogic)
+	r.With(authMiddleware).Post("/get-order", productHandler.FindOrderConditionLogic)
 	r.With(authMiddleware).Post("/bulk-update-order", productHandler.BulkUpdateOrder)
 	r.With(authMiddleware).Get("/get-order-summary", productHandler.OrderSummaryLogic)
+	r.With(authMiddleware).Get("/get-order-history", productHandler.FindOrderHistory)
 
 	return r
 }

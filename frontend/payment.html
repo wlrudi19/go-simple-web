@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Summary</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .product-card {
+            margin-bottom: 20px;
+        }
+        .total-amount {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h2>Payment Summary</h2>
+        <div id="paymentSummary"></div>
+        <button id="payButton" class="btn btn-primary mt-3">Pay Now</button>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Function to fetch payment summary
+            function fetchPaymentSummary() {
+                var accessToken = localStorage.getItem('accessToken');
+                if (!accessToken) {
+                    console.error('Access token not found.');
+                    alert('You need to login first.');
+                    return;
+                }
+
+                $.ajax({
+                    url: 'http://localhost:3012/api/products/get-order-summary',
+                    method: 'GET',
+                    headers: {
+                        'Authorization': accessToken,
+                        'Content-Type': 'application/json'
+                    },
+                    success: function(response) {
+                        console.log('Payment summary:', response.data);
+                        displayPaymentSummary(response.data);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Failed to fetch payment summary:', error);
+                        alert('Failed to fetch payment summary. Please try again.');
+                    }
+                });
+            }
+
+            // Function to display payment summary
+            function displayPaymentSummary(data) {
+                var paymentSummaryDiv = $('#paymentSummary');
+                paymentSummaryDiv.empty(); // Clear previous content
+
+                var products = data.data;
+                var totalPayment = data.bayar;
+                var coupon = data.kupon;
+
+                products.forEach(function(product) {
+                    var productHTML = `
+                        <div class="card product-card">
+                            <div class="card-body">
+                                <h5 class="card-title">${product.product_name}</h5>
+                                <p class="card-text">quantity: ${product.total}</p>
+                                <p class="card-text">amount: IDR ${product.amount}</p>
+                            </div>
+                        </div>
+                    `;
+                    paymentSummaryDiv.append(productHTML);
+                });
+
+                var totalHTML = `
+                    <div class="total-amount mt-3">
+                        <p>Total Payment: ${formatCurrency(totalPayment)}</p>
+                        <p>Coupon For You: ${coupon}</p>
+                    </div>
+                `;
+                paymentSummaryDiv.append(totalHTML);
+
+                function formatCurrency(amount) {
+                return new Intl.NumberFormat('id-ID', {
+                    style: 'currency',
+                    currency: 'IDR',
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                }).format(amount);
+            }
+            }
+
+            // Fetch payment summary when page loads
+            // Handle payment button click
+            $('#payButton').on('click', function() {
+                var accessToken = localStorage.getItem('accessToken');
+                if (!accessToken) {
+                    console.error('Access token not found.');
+                    alert('You need to login first.');
+                    return;
+                }
+
+                $.ajax({
+                    url: 'http://localhost:3012/api/products/get-order-summary',
+                    method: 'GET',
+                    headers: {
+                        'Authorization': accessToken,
+                        'Content-Type': 'application/json'
+                    },
+                    success: function(response) {
+                        var products = response.data.data;
+
+                        var requestData = products.map(function(product) {
+                            return {
+                                product_update: false,
+                                status: 'PAID',
+                                collect_id: product.collect_id,
+                                product_id: product.product_id
+                            };
+                        });
+
+                        $.ajax({
+                            url: 'http://localhost:3012/api/products/bulk-update-order',
+                            method: 'POST',
+                            headers: {
+                                'Authorization': accessToken,
+                                'Content-Type': 'application/json'
+                            },
+                            data: JSON.stringify(requestData),
+                            success: function(response) {
+                                console.log('Payment successful:', response);
+                                alert('Payment successful. Redirecting to payment page.');
+                                // Redirect to payment page or perform other actions
+                                window.location.href = 'cart.html';
+                            },
+                            error: function(xhr, status, error) {
+                                console.error('Payment failed:', error);
+                                alert('Failed to process payment. Please try again.');
+                            }
+                        });
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Failed to fetch payment summary:', error);
+                        alert('Failed to fetch payment summary. Please try again.');
+                    }
+                });
+            });
+
+            // Fetch payment summary when page loads
+            fetchPaymentSummary();
+        });
+    </script>
+</body>
+</html>

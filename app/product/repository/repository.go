@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/wlrudi19/go-simple-web/app/product/model"
@@ -15,11 +18,15 @@ type ProductRepository interface {
 	FindProduct(ctx context.Context, id int) (model.FindProductResponse, error)
 	FindProductAll(ctx context.Context) ([]model.Product, error)
 	DeleteProduct(ctx context.Context, tx *sql.Tx, id int) error
+
+	//user
 	UpdateProduct(ctx context.Context, tx *sql.Tx, id int, fields model.UpdateProductRequest) error
 	CreateOrder(ctx context.Context, tx *sql.Tx, order model.Order) error
 	UpdateOrder(ctx context.Context, tx *sql.Tx, fields model.Order) error
 	FindOrderById(ctx context.Context, userId int) ([]model.Order, error)
 	ReduceStok(ctx context.Context, tx *sql.Tx, id int, quantity int) error
+	CreateOrderHistory(ctx context.Context, tx *sql.Tx, order model.OrderHistory) error
+	FindOrderHistoryById(ctx context.Context, userId int) ([]model.OrderHistory, error)
 	WithTransaction() (*sql.Tx, error)
 }
 
@@ -31,6 +38,33 @@ func NewProductRepository(db *sql.DB) ProductRepository {
 	return &productrepository{
 		db: db,
 	}
+}
+
+func (pr *productrepository) intsToString(numbers []int) string {
+	str := make([]string, len(numbers))
+	for i, num := range numbers {
+		str[i] = fmt.Sprint(num)
+	}
+	return strings.Join(str, ",")
+}
+
+func (pr *productrepository) stringToIntSlice(str string) ([]int, error) {
+	if str == "" {
+		return nil, nil
+	}
+
+	strSlice := strings.Split(str, ",")
+	intSlice := make([]int, len(strSlice))
+
+	for i, s := range strSlice {
+		num, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, err
+		}
+		intSlice[i] = num
+	}
+
+	return intSlice, nil
 }
 
 func (pr *productrepository) WithTransaction() (*sql.Tx, error) {
@@ -63,6 +97,22 @@ func (pr *productrepository) CreateOrder(ctx context.Context, tx *sql.Tx, order 
 	var id int
 	sql := "insert into orders (product_id,user_id,amount,total,status) values ($1, $2, $3, $4, $5) RETURNING id"
 	err := tx.QueryRowContext(ctx, sql, order.ProductID, order.UserID, order.Amount, order.Total, order.Status).Scan(&id)
+	if err != nil {
+		log.Printf("[QUERY] failed insert into database :%v", err)
+		return err
+	}
+
+	order.Id = int(id)
+	return nil
+}
+
+func (pr *productrepository) CreateOrderHistory(ctx context.Context, tx *sql.Tx, order model.OrderHistory) error {
+	log.Printf("[QUERY] creating order history: %v", order)
+
+	var id int
+	coStr := pr.intsToString(order.CollectOrder)
+	sql := "insert into orders_history (status,collect_order, user_id) values ($1, $2, $3) RETURNING id"
+	err := tx.QueryRowContext(ctx, sql, order.Status, coStr, order.UserID).Scan(&id)
 	if err != nil {
 		log.Printf("[QUERY] failed insert into database :%v", err)
 		return err
@@ -153,6 +203,43 @@ func (pr *productrepository) FindOrderById(ctx context.Context, userId int) ([]m
 			log.Fatalf("[QUERY] failed to finding order row: %v", err)
 			return nil, err
 		}
+		orders = append(orders, order)
+	}
+
+	return orders, nil
+}
+
+func (pr *productrepository) FindOrderHistoryById(ctx context.Context, userId int) ([]model.OrderHistory, error) {
+	log.Printf("[QUERY] find order history")
+
+	sql := "select id, status, collect_order from orders_history where user_id = $1 and deleted_on isnull order by created_on desc"
+	rows, err := pr.db.QueryContext(ctx, sql, userId)
+	if err != nil {
+		log.Printf("[QUERY]] failed to finding products, %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []model.OrderHistory
+	for rows.Next() {
+		var order model.OrderHistory
+		var collectOrderStr string
+		err := rows.Scan(
+			&order.Id,
+			&order.Status,
+			&collectOrderStr,
+		)
+		if err != nil {
+			log.Fatalf("[QUERY] failed to finding order row: %v", err)
+			return nil, err
+		}
+
+		order.CollectOrder, err = pr.stringToIntSlice(collectOrderStr)
+		if err != nil {
+			log.Fatalf("[QUERY] failed to convert CollectOrder to []int: %v", err)
+			return nil, err
+		}
+
 		orders = append(orders, order)
 	}
 

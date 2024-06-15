@@ -23,6 +23,8 @@ type ProductLogic interface {
 	FindOrderConditionLogic(ctx context.Context, userId int, param model.Order) ([]model.Order, error)
 	OrderSummaryLogic(ctx context.Context, userId int) (model.OrderSummary, error)
 	BulkUpdateOrderLogic(ctx context.Context, params []model.BulkUpdateOrder) error
+	CreateOrderHistoryLogic(ctx context.Context, param model.OrderHistory) error
+	FindOrderHistoryByIdLogic(ctx context.Context, userId int) ([]model.OrderHistory, error)
 }
 
 type productlogic struct {
@@ -161,6 +163,27 @@ func (l *productlogic) OrderLogic(ctx context.Context, param model.Order) error 
 	return nil
 }
 
+func (l *productlogic) CreateOrderHistoryLogic(ctx context.Context, param model.OrderHistory) error {
+	log.Printf("[LOGIC] order with param: %v", param)
+
+	tx, err := l.ProductRepository.WithTransaction()
+	if err != nil {
+		log.Printf("[LOGIC] failed to order :%v", err)
+		return err
+	}
+
+	err = l.ProductRepository.CreateOrderHistory(ctx, tx, param)
+	if err != nil {
+		log.Printf("[LOGIC] failed to create order history :%v", err)
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+	log.Printf("[LOGIC] update product success")
+	return nil
+}
+
 func (l *productlogic) FindOrderByIdLogic(ctx context.Context, userId int) ([]model.Order, error) {
 	log.Printf("[LOGIC] find order with id: %v", userId)
 
@@ -174,6 +197,36 @@ func (l *productlogic) FindOrderByIdLogic(ctx context.Context, userId int) ([]mo
 
 	log.Printf("[LOGIC] order find successfully")
 	return orders, nil
+}
+
+func (l *productlogic) FindOrderHistoryByIdLogic(ctx context.Context, userId int) ([]model.OrderHistory, error) {
+	log.Printf("[LOGIC] find order history with id: %v", userId)
+
+	var history []model.OrderHistory
+
+	history, err := l.ProductRepository.FindOrderHistoryById(ctx, userId)
+	if err != nil {
+		log.Printf("[LOGIC] failed to find order history:%v", err)
+		return history, err
+	}
+
+	for k, v := range history {
+		for _, val := range v.CollectOrder {
+			param := model.Order{
+				Id: val,
+			}
+			order, err := l.FindOrderConditionLogic(ctx, userId, param)
+			if err != nil {
+				log.Printf("[LOGIC] failed to find order:%v", err)
+				return history, err
+			}
+
+			history[k].Amount = order[0].Amount
+		}
+	}
+
+	log.Printf("[LOGIC] order history find successfully")
+	return history, nil
 }
 
 func (l *productlogic) FindOrderConditionLogic(ctx context.Context, userId int, param model.Order) ([]model.Order, error) {
@@ -209,6 +262,12 @@ func (l *productlogic) FindOrderConditionLogic(ctx context.Context, userId int, 
 	}
 
 	for _, summary := range summaryMap {
+		product, err := l.ProductRepository.FindProduct(ctx, summary.ProductID)
+		if err != nil {
+			log.Printf("[LOGIC] failed to find product:%v", err)
+			return orders, err
+		}
+		summary.ProductName = product.Name
 		result = append(result, summary)
 	}
 
@@ -286,6 +345,7 @@ func (l *productlogic) UpdateOrderLogic(ctx context.Context, params model.Order)
 func (l *productlogic) BulkUpdateOrderLogic(ctx context.Context, params []model.BulkUpdateOrder) error {
 	log.Printf("[LOGIC] bulk update order with param: %v", params)
 
+	var mapCollect []int
 	for k, val := range params {
 		for _, v := range val.CollectId {
 			var order model.Order
@@ -300,12 +360,29 @@ func (l *productlogic) BulkUpdateOrderLogic(ctx context.Context, params []model.
 			}
 		}
 
+		if val.Status == "PAID" {
+			mapCollect = append(mapCollect, val.CollectId...)
+		}
+
 		if val.ProductUpdate {
 			err := l.ReduceStokLogic(ctx, val.ProductID, val.Total)
 			if err != nil {
 				log.Printf("[LOGIC] failed to update product :%v", err)
 				return err
 			}
+		}
+	}
+
+	if len(mapCollect) > 0 {
+		var oh model.OrderHistory
+		oh = model.OrderHistory{
+			Status:       "PAID",
+			CollectOrder: mapCollect,
+		}
+		err := l.CreateOrderHistoryLogic(ctx, oh)
+		if err != nil {
+			log.Printf("[LOGIC] failed to order order history :%v", err)
+			return err
 		}
 	}
 

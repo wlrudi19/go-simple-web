@@ -34,13 +34,22 @@ type UpdateProductRequest struct {
 }
 
 type Order struct {
-	Id        int    `json:"id,omitempty"`
-	ProductID int    `json:"product_id"`
-	UserID    int    `json:"user_id"`
-	Total     int    `json:"total"`
-	Amount    string `json:"amount"`
-	Status    string `json:"status"`
-	CollectId []int  `json:"collect_id,omitempty"`
+	Id          int    `json:"id,omitempty"`
+	ProductID   int    `json:"product_id"`
+	ProductName string `json:"product_name"`
+	UserID      int    `json:"user_id"`
+	Total       int    `json:"total"`
+	Amount      string `json:"amount"`
+	Status      string `json:"status"`
+	CollectId   []int  `json:"collect_id,omitempty"`
+}
+
+type OrderHistory struct {
+	Id           int    `json:"id"`
+	Status       string `json:"status"`
+	CollectOrder []int  `json:"collect_order"`
+	Amount       string `json:"amount"`
+	UserID       int    `json:"user_id"`
 }
 
 type OrderSummary struct {

@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/wlrudi19/go-simple-web/app/product/model"
 	"github.com/wlrudi19/go-simple-web/app/product/repository"
@@ -14,7 +16,13 @@ type ProductLogic interface {
 	FindProductAllLogic(ctx context.Context) ([]model.Product, error)
 	DeleteProductLogic(ctx context.Context, id int) error
 	UpdateProductLogic(ctx context.Context, id int, fields model.UpdateProductRequest) error
+
+	//user
 	OrderLogic(ctx context.Context, param model.Order) error
+	FindOrderByIdLogic(ctx context.Context, userId int) ([]model.Order, error)
+	FindOrderConditionLogic(ctx context.Context, userId int, param model.Order) ([]model.Order, error)
+	OrderSummaryLogic(ctx context.Context, userId int) (model.OrderSummary, error)
+	BulkUpdateOrderLogic(ctx context.Context, params []model.BulkUpdateOrder) error
 }
 
 type productlogic struct {
@@ -115,14 +123,12 @@ func (l *productlogic) UpdateProductLogic(ctx context.Context, id int, fields mo
 	log.Printf("[LOGIC] update product with id: %d", id)
 
 	tx, err := l.ProductRepository.WithTransaction()
-
 	if err != nil {
 		log.Printf("[LOGIC] failed to update product :%v", err)
 		return err
 	}
 
 	err = l.ProductRepository.UpdateProduct(ctx, tx, id, fields)
-
 	if err != nil {
 		log.Printf("[LOGIC] failed to update product :%v", err)
 		tx.Rollback()
@@ -152,5 +158,178 @@ func (l *productlogic) OrderLogic(ctx context.Context, param model.Order) error 
 
 	tx.Commit()
 	log.Printf("[LOGIC] update product success")
+	return nil
+}
+
+func (l *productlogic) FindOrderByIdLogic(ctx context.Context, userId int) ([]model.Order, error) {
+	log.Printf("[LOGIC] find order with id: %v", userId)
+
+	var orders []model.Order
+
+	orders, err := l.ProductRepository.FindOrderById(ctx, userId)
+	if err != nil {
+		log.Printf("[LOGIC] failed to find order s:%v", err)
+		return orders, err
+	}
+
+	log.Printf("[LOGIC] order find successfully")
+	return orders, nil
+}
+
+func (l *productlogic) FindOrderConditionLogic(ctx context.Context, userId int, param model.Order) ([]model.Order, error) {
+	log.Printf("[LOGIC] find order with id: %v %v", userId, param)
+
+	var result []model.Order
+
+	orders, err := l.ProductRepository.FindOrderById(ctx, userId)
+	if err != nil {
+		log.Printf("[LOGIC] failed to find order s:%v", err)
+		return orders, err
+	}
+
+	summaryMap := make(map[int]model.Order)
+	for _, order := range orders {
+		if order.Status == param.Status {
+			if existing, found := summaryMap[order.ProductID]; found {
+				existing.Total += order.Total
+				existing.Amount = l.sumAmounts(existing.Amount, order.Amount)
+				existing.CollectId = append(existing.CollectId, order.Id)
+				summaryMap[order.ProductID] = existing
+			} else {
+				summaryMap[order.ProductID] = model.Order{
+					UserID:    userId,
+					ProductID: order.ProductID,
+					Total:     order.Total,
+					Amount:    order.Amount,
+					Status:    order.Status,
+					CollectId: []int{order.Id},
+				}
+			}
+		}
+	}
+
+	for _, summary := range summaryMap {
+		result = append(result, summary)
+	}
+
+	log.Printf("[LOGIC] find order cart successfully")
+	return result, nil
+}
+
+func (l *productlogic) sumAmounts(amount1, amount2 string) string {
+	a1, _ := strconv.ParseFloat(amount1, 64)
+	a2, _ := strconv.ParseFloat(amount2, 64)
+
+	return fmt.Sprintf("%.2f", a1+a2)
+}
+
+func (l *productlogic) OrderSummaryLogic(ctx context.Context, userId int) (model.OrderSummary, error) {
+	log.Printf("[LOGIC] order summary with user id: %v", userId)
+	var result model.OrderSummary
+	var filter model.Order
+
+	filter.Status = "PENDING"
+	orders, err := l.FindOrderConditionLogic(ctx, userId, filter)
+	if err != nil {
+		log.Printf("[LOGIC] failed to find order s:%v", err)
+		return result, err
+	}
+
+	var totalAmount float64
+	var kupon int
+
+	for _, order := range orders {
+		amtFloat, err := strconv.ParseFloat(order.Amount, 64)
+		if err != nil {
+			log.Printf("[LOGIC] failed to parse amount: %v", err)
+			return result, err
+		}
+		totalAmount += amtFloat
+
+		if amtFloat > 50000 {
+			kupon += 1
+		}
+	}
+
+	kupon += int(totalAmount) / 100000
+
+	result = model.OrderSummary{
+		Data:       orders,
+		Kupon:      kupon,
+		TotalBayar: totalAmount,
+	}
+
+	return result, nil
+}
+
+func (l *productlogic) UpdateOrderLogic(ctx context.Context, params model.Order) error {
+	log.Printf("[LOGIC] update order with param: %v", params)
+
+	tx, err := l.ProductRepository.WithTransaction()
+	if err != nil {
+		log.Printf("[LOGIC] failed to order product :%v", err)
+		return err
+	}
+
+	err = l.ProductRepository.UpdateOrder(ctx, tx, params)
+	if err != nil {
+		log.Printf("[LOGIC] failed to order product :%v", err)
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+	log.Printf("[LOGIC] update order success")
+	return nil
+}
+
+func (l *productlogic) BulkUpdateOrderLogic(ctx context.Context, params []model.BulkUpdateOrder) error {
+	log.Printf("[LOGIC] bulk update order with param: %v", params)
+
+	for k, val := range params {
+		for _, v := range val.CollectId {
+			var order model.Order
+			order = model.Order{
+				Id:     v,
+				Status: params[k].Status,
+			}
+			err := l.UpdateOrderLogic(ctx, order)
+			if err != nil {
+				log.Printf("[LOGIC] failed to order product :%v", err)
+				return err
+			}
+		}
+
+		if val.ProductUpdate {
+			err := l.ReduceStokLogic(ctx, val.ProductID, val.Total)
+			if err != nil {
+				log.Printf("[LOGIC] failed to update product :%v", err)
+				return err
+			}
+		}
+	}
+
+	log.Printf("[LOGIC] bulk update order success")
+	return nil
+}
+
+func (l *productlogic) ReduceStokLogic(ctx context.Context, id int, quantity int) error {
+	log.Printf("[LOGIC] update product with id: %d", id)
+
+	tx, err := l.ProductRepository.WithTransaction()
+	if err != nil {
+		log.Printf("[LOGIC] failed to update product :%v", err)
+		return err
+	}
+
+	err = l.ProductRepository.ReduceStok(ctx, tx, id, quantity)
+	if err != nil {
+		log.Printf("[LOGIC] failed to update product :%v", err)
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+	log.Printf("[LOGIC] update product success with id: %d", id)
 	return nil
 }

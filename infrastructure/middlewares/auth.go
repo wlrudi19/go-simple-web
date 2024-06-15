@@ -15,6 +15,7 @@ type contextKey string
 
 const (
 	ContextKeyUserEmail contextKey = "userEmail"
+	ContextKeyUserId    contextKey = "userId"
 )
 
 func Authenticate(next http.Handler) http.Handler {
@@ -63,7 +64,23 @@ func Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
+		userIdFloat, ok := claims["Id"].(float64)
+		if !ok {
+			respon := []httputils.StandardError{
+				{
+					Code:   "401",
+					Title:  "Unauthorized",
+					Detail: "Your access token invalid",
+					Object: httputils.ErrorObject{},
+				},
+			}
+			httputils.WriteErrorResponse(writer, http.StatusBadRequest, respon)
+			return
+		}
+		userId := int(userIdFloat)
+
 		ctx := context.WithValue(request.Context(), ContextKeyUserEmail, email)
+		ctx = context.WithValue(request.Context(), ContextKeyUserId, userId)
 		next.ServeHTTP(writer, request.WithContext(ctx))
 	})
 }
@@ -80,7 +97,6 @@ func GenerateAccessToken(userId int, email string) (string, error) {
 	//tandatangan token dengan secret key
 	secretKey := []byte("x-simple-web")
 	tokenString, err := token.SignedString(secretKey)
-
 	if err != nil {
 		log.Printf("[JWT] failed to generate access token, %v", err)
 		return "", err

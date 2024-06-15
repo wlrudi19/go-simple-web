@@ -18,6 +18,8 @@ type ProductRepository interface {
 	UpdateProduct(ctx context.Context, tx *sql.Tx, id int, fields model.UpdateProductRequest) error
 	CreateOrder(ctx context.Context, tx *sql.Tx, order model.Order) error
 	UpdateOrder(ctx context.Context, tx *sql.Tx, fields model.Order) error
+	FindOrderById(ctx context.Context, userId int) ([]model.Order, error)
+	ReduceStok(ctx context.Context, tx *sql.Tx, id int, quantity int) error
 	WithTransaction() (*sql.Tx, error)
 }
 
@@ -60,7 +62,7 @@ func (pr *productrepository) CreateOrder(ctx context.Context, tx *sql.Tx, order 
 
 	var id int
 	sql := "insert into orders (product_id,user_id,amount,total,status) values ($1, $2, $3, $4, $5) RETURNING id"
-	err := tx.QueryRowContext(ctx, sql, order.ProductID, order.UserID, order.Amount, order.Total, order.UserID).Scan(&id)
+	err := tx.QueryRowContext(ctx, sql, order.ProductID, order.UserID, order.Amount, order.Total, order.Status).Scan(&id)
 	if err != nil {
 		log.Printf("[QUERY] failed insert into database :%v", err)
 		return err
@@ -122,6 +124,39 @@ func (pr *productrepository) FindProductAll(ctx context.Context) ([]model.Produc
 	}
 
 	return products, nil
+}
+
+func (pr *productrepository) FindOrderById(ctx context.Context, userId int) ([]model.Order, error) {
+	log.Printf("[QUERY] find order")
+
+	sql := "select id, product_id, user_id, amount, total, status from orders where user_id = $1 and deleted_on isnull"
+	rows, err := pr.db.QueryContext(ctx, sql, userId)
+	if err != nil {
+		log.Printf("[QUERY]] failed to finding products, %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []model.Order
+	for rows.Next() {
+		var order model.Order
+		err := rows.Scan(
+			&order.Id,
+			&order.ProductID,
+			&order.UserID,
+			&order.Amount,
+			&order.Total,
+			&order.Status,
+		)
+
+		if err != nil {
+			log.Fatalf("[QUERY] failed to finding order row: %v", err)
+			return nil, err
+		}
+		orders = append(orders, order)
+	}
+
+	return orders, nil
 }
 
 func (pr *productrepository) DeleteProduct(ctx context.Context, tx *sql.Tx, id int) error {
@@ -221,6 +256,42 @@ func (pr *productrepository) UpdateOrder(ctx context.Context, tx *sql.Tx, fields
 	if fields.Status != "" {
 		updateBuilder = updateBuilder.Set("status", &fields.Status)
 	}
+
+	query, args, err := updateBuilder.PlaceholderFormat(squirrel.Dollar).ToSql()
+	if err != nil {
+		return err
+	}
+
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		log.Printf("[QUERY] failed to update orders, %v", err)
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("[QUERY] failed to update orders, %v", err)
+		return err
+	}
+
+	if rowsAffected == 0 {
+		err := errors.New("sql: no rows in result set")
+		log.Printf("[QUERY] product not found, %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (pr *productrepository) ReduceStok(ctx context.Context, tx *sql.Tx, id int, quantity int) error {
+	log.Printf("[QUERY] updating order with id: %d", id)
+
+	updateBuilder := squirrel.Update("products").
+		Set("stok", squirrel.Expr("stok - ?", quantity)).
+		Where(squirrel.And{
+			squirrel.Eq{"id": id},
+			squirrel.Expr("stok >= ?", quantity),
+		})
 
 	query, args, err := updateBuilder.PlaceholderFormat(squirrel.Dollar).ToSql()
 	if err != nil {

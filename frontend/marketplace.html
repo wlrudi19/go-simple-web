@@ -1,0 +1,110 @@
+<!-- marketplace.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marketplace</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2>Marketplace</h2>
+        <!-- Placeholder for displaying products -->
+        <div id="productList"></div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+        // Function to fetch products
+        $(document).ready(function() {
+            function fetchProducts() {
+                $.ajax({
+                    url: 'http://localhost:3012/api/products/findall',
+                    method: 'GET',
+                    contentType: 'application/json',
+                    success: function(response) {
+                        console.log('Products:', response.data);
+                        // Handle products display here
+                        displayProducts(response.data);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Failed to fetch products:', error);
+                    }
+                });
+            }
+
+            // Function to display products
+            function displayProducts(products) {
+                var productList = $('#productList');
+                productList.empty(); // Clear previous content
+
+                // Loop through products and generate HTML
+                products.forEach(function(product) {
+                    var productHTML = `
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">${product.name}</h5>
+                                <p class="card-text">${product.description}</p>
+                                <p class="card-text">Price: ${product.amount}</p>
+                                <p class="card-text">Stock: ${product.stock}</p>
+                                <button class="btn btn-primary add-to-cart-btn" data-product-id="${product.id}" data-product-amount="${product.amount}">Add to Cart</button>
+                            </div>
+                        </div>
+                    `;
+                    productList.append(productHTML);
+                });
+
+                // Attach click event listener to Add to Cart buttons
+                $('.add-to-cart-btn').on('click', function() {
+                    var productId = $(this).data('product-id');
+                    var productAmount = $(this).data('product-amount');
+                    
+                    addToCart(productId, productAmount);
+                });
+            }
+
+            // Function to add product to cart
+            function addToCart(productId, productAmount) {
+                var accessToken = localStorage.getItem('accessToken');
+                if (!accessToken) {
+                    console.error('Access token not found.');
+                    alert('You need to login first.');
+                    return;
+                }
+
+                // Prepare data for API request
+                var requestData = {
+                    product_id: productId,
+                    total: 1,
+                    amount: productAmount.toString(),
+                    status: "CART"
+                };
+
+                // Perform API request
+                $.ajax({
+                    url: 'http://localhost:3012/api/products/order',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'Authorization': accessToken
+                    },
+                    data: JSON.stringify(requestData),
+                    success: function(response) {
+                        console.log('Add to Cart successful', response);
+                        alert('Product added to cart successfully!');
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Add to Cart failed', error);
+                        alert('Failed to add product to cart. Please try again.');
+                    }
+                });
+            }
+
+            // Fetch products when page loads
+            fetchProducts();
+        });
+    </script>
+</body>
+</html>

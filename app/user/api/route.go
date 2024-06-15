@@ -5,11 +5,17 @@ import (
 )
 
 func NewUserRouter(userHandler UserHandler) *chi.Mux {
-	router := chi.NewRouter()
+	// router := chi.NewRouter()
 
-	router.Route("/api/users", func(r chi.Router) {
-		r.Post("/login", userHandler.LoginUserHandler)
-	})
+	// router.Route("/api/users", func(r chi.Router) {
+	// 	r.Post("/login", userHandler.LoginUserHandler)
+	// })
 
-	return router
+	// return router
+
+	r := chi.NewRouter()
+
+	r.Post("/login", userHandler.LoginUserHandler)
+
+	return r
 }

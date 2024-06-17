@@ -55,7 +55,7 @@ func main() {
 	r.Use(corsMiddleware.Handler)
 
 	// Serve static files from the frontend directory
-	r.Handle("/", http.FileServer(http.Dir("./frontend/")))
+	r.Handle("/", http.FileServer(http.Dir("./html/login/")))
 
 	//r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {

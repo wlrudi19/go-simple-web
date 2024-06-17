@@ -25,11 +25,11 @@ func main() {
 	r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
 		if path == "" || path == "index.html" {
-			http.ServeFile(w, r, filepath.Join("./frontend/", "index.html"))
+			http.ServeFile(w, r, filepath.Join("./html/login/", "index.html"))
 			return
 		}
 
-		fileServer := http.FileServer(http.Dir("./frontend/"))
+		fileServer := http.FileServer(http.Dir("./html/login/"))
 		fileServer.ServeHTTP(w, r)
 	})
 

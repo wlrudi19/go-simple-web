@@ -60,6 +60,7 @@
                 var products = data.data;
                 var totalPayment = data.bayar;
                 var coupon = data.kupon;
+                var userId = data.user_id;
 
                 products.forEach(function(product) {
                     var productHTML = `
@@ -111,13 +112,15 @@
                     },
                     success: function(response) {
                         var products = response.data.data;
+                        var userId = response.data.user_id;
 
                         var requestData = products.map(function(product) {
                             return {
                                 product_update: false,
                                 status: 'PAID',
                                 collect_id: product.collect_id,
-                                product_id: product.product_id
+                                product_id: product.product_id,
+                                user_id: userId
                             };
                         });
 

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order History</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="my-4">Order History</h1>
+        <div id="orderHistory"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            var accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) {
+                console.error('Access token not found.');
+                alert('You need to login first.');
+                return;
+            }
+
+            function formatCurrency(amount) {
+                return new Intl.NumberFormat('id-ID', {
+                    style: 'currency',
+                    currency: 'IDR',
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0
+                }).format(amount);
+            }
+
+            $.ajax({
+                url: 'http://localhost:3012/api/products/get-order-history',
+                method: 'GET',
+                headers: {
+                    'Authorization': accessToken,
+                    'Content-Type': 'application/json'
+                },
+                success: function(response) {
+                    var orders = response.data;
+                    var orderHistoryContainer = $('#orderHistory');
+
+                    orders.forEach(function(order) {
+                        // Convert UTC time to local time for display
+                        var createdOnUTC = new Date(order.created_on);
+                        var localCreatedOn = createdOnUTC.toLocaleString('en-US', { 
+                            timeZone: 'Asia/Jakarta', // Ganti dengan zona waktu yang sesuai
+                            year: 'numeric', 
+                            month: '2-digit', 
+                            day: '2-digit', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit' 
+                        });
+
+                        var orderItem = `
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Date: ${localCreatedOn}</h5>
+                                    <p class="card-text">Amount: ${formatCurrency(parseInt(order.amount))}</p>
+                                    <p class="card-text">${order.condition_status}</p>
+                                </div>
+                            </div>
+                        `;
+
+                        orderHistoryContainer.append(orderItem);
+                    });
+                },
+                error: function(xhr, status, error) {
+                    console.error('Failed to fetch order history:', error);
+                    alert('Failed to fetch order history. Please try again.');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

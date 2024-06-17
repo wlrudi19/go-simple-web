@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 type Product struct {
 	Id          int    `json:"id"`
 	Name        string `json:"name"`
@@ -45,17 +47,20 @@ type Order struct {
 }
 
 type OrderHistory struct {
-	Id           int    `json:"id"`
-	Status       string `json:"status"`
-	CollectOrder []int  `json:"collect_order"`
-	Amount       string `json:"amount"`
-	UserID       int    `json:"user_id"`
+	Id            int       `json:"id"`
+	Status        string    `json:"status"`
+	CollectOrder  []int     `json:"collect_order"`
+	Amount        string    `json:"amount"`
+	UserID        int       `json:"user_id,omitempty"`
+	CreatedOn     time.Time `json:"created_on"`
+	ConditionStat string    `json:"condition_status"`
 }
 
 type OrderSummary struct {
 	Data       []Order `json:"data"`
 	Kupon      int     `json:"kupon"`
 	TotalBayar float64 `json:"bayar"`
+	UserId     int     `json:"user_id"`
 }
 
 type BulkUpdateOrder struct {
@@ -64,4 +69,5 @@ type BulkUpdateOrder struct {
 	ProductUpdate bool   `json:"product_update"`
 	Status        string `json:"status"`
 	CollectId     []int  `json:"collect_id"`
+	UserId        int    `json:"user_id"`
 }

@@ -212,10 +212,10 @@ func (pr *productrepository) FindOrderById(ctx context.Context, userId int) ([]m
 func (pr *productrepository) FindOrderHistoryById(ctx context.Context, userId int) ([]model.OrderHistory, error) {
 	log.Printf("[QUERY] find order history")
 
-	sql := "select id, status, collect_order from orders_history where user_id = $1 and deleted_on isnull order by created_on desc"
+	sql := "select id, status, collect_order, created_on from orders_history where user_id = $1 and deleted_on isnull order by created_on desc"
 	rows, err := pr.db.QueryContext(ctx, sql, userId)
 	if err != nil {
-		log.Printf("[QUERY]] failed to finding products, %v", err)
+		log.Printf("[QUERY]] failed to finding order history, %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -228,9 +228,10 @@ func (pr *productrepository) FindOrderHistoryById(ctx context.Context, userId in
 			&order.Id,
 			&order.Status,
 			&collectOrderStr,
+			&order.CreatedOn,
 		)
 		if err != nil {
-			log.Fatalf("[QUERY] failed to finding order row: %v", err)
+			log.Fatalf("[QUERY] failed to finding order history row: %v", err)
 			return nil, err
 		}
 

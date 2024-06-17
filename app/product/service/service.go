@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"time"
 
 	"github.com/wlrudi19/go-simple-web/app/product/model"
 	"github.com/wlrudi19/go-simple-web/app/product/repository"
@@ -210,18 +211,29 @@ func (l *productlogic) FindOrderHistoryByIdLogic(ctx context.Context, userId int
 		return history, err
 	}
 
+	log.Printf("ini apa 2: %v", history)
+
 	for k, v := range history {
 		for _, val := range v.CollectOrder {
-			param := model.Order{
-				Id: val,
-			}
-			order, err := l.FindOrderConditionLogic(ctx, userId, param)
+			order, err := l.ProductRepository.FindOrderById(ctx, userId)
 			if err != nil {
 				log.Printf("[LOGIC] failed to find order:%v", err)
 				return history, err
 			}
-
-			history[k].Amount = order[0].Amount
+			for _, values := range order {
+				if values.Id == val {
+					amountHistory, _ := strconv.ParseFloat(history[k].Amount, 64)
+					amountValues, _ := strconv.ParseFloat(values.Amount, 64)
+					totalAmount := amountHistory + amountValues
+					history[k].Amount = fmt.Sprintf("%d", int64(totalAmount))
+				}
+				continue
+			}
+		}
+		if time.Since(history[k].CreatedOn).Hours() >= 3 {
+			history[k].ConditionStat = "CLOSED"
+		} else {
+			history[k].ConditionStat = "OPEN"
 		}
 	}
 
@@ -316,6 +328,7 @@ func (l *productlogic) OrderSummaryLogic(ctx context.Context, userId int) (model
 		Data:       orders,
 		Kupon:      kupon,
 		TotalBayar: totalAmount,
+		UserId:     userId,
 	}
 
 	return result, nil
@@ -378,6 +391,7 @@ func (l *productlogic) BulkUpdateOrderLogic(ctx context.Context, params []model.
 		oh = model.OrderHistory{
 			Status:       "PAID",
 			CollectOrder: mapCollect,
+			UserID:       params[0].UserId,
 		}
 		err := l.CreateOrderHistoryLogic(ctx, oh)
 		if err != nil {
